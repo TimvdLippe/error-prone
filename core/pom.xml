@@ -351,6 +351,11 @@
       <version>1.0.5</version>
       <scope>test</scope>
     </dependency>
+    <dependency>
+      <groupId>org.threeten</groupId>
+      <artifactId>threeten-extra</artifactId>
+      <version>1.5.0</version>
+    </dependency>
   </dependencies>
 
   <build>
@@ -401,8 +406,29 @@
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-surefire-plugin</artifactId>
-        <version>2.19.1</version>
         <configuration>
+          <!-- Run tests with failsafe to use the Multi-Release JAR -->
+          <skipTests>true</skipTests>
+        </configuration>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-failsafe-plugin</artifactId>
+        <executions>
+          <execution>
+            <goals>
+              <goal>integration-test</goal>
+              <goal>verify</goal>
+            </goals>
+          </execution>
+        </executions>
+        <configuration>
+          <!-- this is the default pattern of maven-surefire-plugin -->
+          <includes>
+            <include>**/Test*.java</include>
+            <include>**/*Test.java</include>
+            <include>**/*TestCase.java</include>
+          </includes>
           <!-- set heap size to work around http://github.com/travis-ci/travis-ci/issues/3396 -->
           <argLine>-Xmx1g</argLine>
         </configuration>
@@ -458,8 +484,7 @@
         <plugins>
           <plugin>
             <groupId>org.apache.maven.plugins</groupId>
-            <artifactId>maven-surefire-plugin</artifactId>
-            <version>2.19.1</version>
+            <artifactId>maven-failsafe-plugin</artifactId>
             <configuration>
               <forkCount>4</forkCount>
               <reuseForks>true</reuseForks>
@@ -480,15 +505,6 @@
         <plugins>
           <plugin>
             <groupId>org.apache.maven.plugins</groupId>
-            <artifactId>maven-compiler-plugin</artifactId>
-            <configuration>
-              <excludes>
-                <exclude>com/google/errorprone/refaster/UInstanceOf.java</exclude>
-              </excludes>
-            </configuration>
-          </plugin>
-          <plugin>
-            <groupId>org.apache.maven.plugins</groupId>
             <artifactId>maven-antrun-plugin</artifactId>
             <executions>
               <execution>
@@ -496,13 +512,29 @@
                 <phase>compile</phase>
                 <configuration>
                   <tasks>
-                    <property name="compile_classpath" refid="maven.compile.classpath"/>
+                    <pathconvert property="compile_classpath" refid="maven.compile.classpath" pathsep="," />
                     <mkdir dir="${java14.build.outputDirectory}" />
+                    <mkdir dir="${java14.generatedSourcesDirectory}" />
+                    <!-- can't use release="14" (the reason we cannot use the maven-compiler-plugin either) because we reference internal JDK classes -->
                     <javac
+                        source="14" target="14"
                         srcdir="${java14.sourceDirectory}"
                         destdir="${java14.build.outputDirectory}"
-                        classpath="${compile_classpath}"
-                        includeantruntime="false" />
+                        includeantruntime="false"
+                        sourcepath="">
+                      <classpath>
+                        <files includes="${compile_classpath}"
+                            excludes="${settings.localRepository}/com/google/errorprone/javac/${javac.version}/javac-${javac.version}.jar" />
+                      </classpath>
+                      <compilerarg value="-s" />
+                      <compilerarg file="${java14.generatedSourcesDirectory}" />
+                      <compilerarg value="--add-exports" />
+                      <compilerarg value="jdk.compiler/com.sun.tools.javac.code=ALL-UNNAMED" />
+                      <compilerarg value="--add-exports" />
+                      <compilerarg value="jdk.compiler/com.sun.tools.javac.tree=ALL-UNNAMED" />
+                      <compilerarg value="--add-exports" />
+                      <compilerarg value="jdk.compiler/com.sun.tools.javac.util=ALL-UNNAMED" />
+                    </javac>
                   </tasks>
                 </configuration>
                 <goals>
@@ -510,6 +542,17 @@
                 </goals>
               </execution>
             </executions>
+          </plugin>
+          <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-jar-plugin</artifactId>
+            <configuration>
+              <archive>
+                <manifestEntries>
+                  <Multi-Release>true</Multi-Release>
+                </manifestEntries>
+              </archive>
+            </configuration>
           </plugin>
         </plugins>
       </build>
